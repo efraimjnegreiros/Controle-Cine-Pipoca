@@ -122,8 +122,7 @@ import express from "express";
 import path from "path";
 import bodyParser from "body-parser";
 import { fileURLToPath } from "url";
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
+import { createClient } from "@supabase/supabase-js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,54 +134,65 @@ app.use(express.static("public"));
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// Abre/Cria o banco SQLite de forma assíncrona
-let db;
-async function initDb() {
-  db = await open({
-    filename: "./pagamentos.db",
-    driver: sqlite3.Database,
-  });
-
-  // Cria tabela se não existir
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS pagamentos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT NOT NULL,
-      forma_pagamento TEXT NOT NULL,
-      valor_pago REAL NOT NULL,
-      presente INTEGER NOT NULL DEFAULT 0,
-      acompanhante INTEGER,
-      FOREIGN KEY(acompanhante) REFERENCES pagamentos(id)
-    )
-  `);
-}
-
-await initDb();
+// 🔹 Conexão com Supabase (usando sua URL e API key)
+const supabase = createClient(
+  "https://zwqtslbyktbwrmdxnaxg.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3cXRzbGJ5a3Rid3JtZHhuYXhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwMjUwMDQsImV4cCI6MjA3MDYwMTAwNH0.knTnH4KHvmNyFvWcuAQbXC1hKY3dHbC-qn-kqGN8xBs"
+);
 
 // Funções CRUD
 async function criarPagamento(nome, forma_pagamento, valor_pago, presente, acompanhante) {
-  await db.run(
-    `INSERT INTO pagamentos (nome, forma_pagamento, valor_pago, presente, acompanhante) VALUES (?, ?, ?, ?, ?)`,
-    [nome, forma_pagamento, valor_pago, presente ? 1 : 0, acompanhante || null]
-  );
-  console.log("Pagamento registrado:", nome);
+  const { error } = await supabase
+    .from("pagamentos")
+    .insert([
+      {
+        nome,
+        forma_pagamento,
+        valor_pago,
+        presente,
+        acompanhante: acompanhante || null
+      }
+    ]);
+
+  if (error) console.error("Erro ao criar pagamento:", error);
 }
 
 async function lerPagamentos() {
-  return await db.all(`SELECT * FROM pagamentos ORDER BY nome ASC`);
+  const { data, error } = await supabase
+    .from("pagamentos")
+    .select("*")
+    .order("nome", { ascending: true });
+
+  if (error) {
+    console.error("Erro ao ler pagamentos:", error);
+    return [];
+  }
+
+  return data;
 }
 
 async function editarPagamento(id, nome, forma_pagamento, valor_pago, presente, acompanhante) {
-  await db.run(
-    `UPDATE pagamentos SET nome = ?, forma_pagamento = ?, valor_pago = ?, presente = ?, acompanhante = ? WHERE id = ?`,
-    [nome, forma_pagamento, valor_pago, presente ? 1 : 0, acompanhante || null, id]
-  );
-  console.log("Pagamento editado:", nome);
+  const { error } = await supabase
+    .from("pagamentos")
+    .update({
+      nome,
+      forma_pagamento,
+      valor_pago,
+      presente,
+      acompanhante: acompanhante || null
+    })
+    .eq("id", id);
+
+  if (error) console.error("Erro ao editar pagamento:", error);
 }
 
 async function deletarPagamento(id) {
-  await db.run(`DELETE FROM pagamentos WHERE id = ?`, [id]);
-  console.log("Pagamento deletado:", id);
+  const { error } = await supabase
+    .from("pagamentos")
+    .delete()
+    .eq("id", id);
+
+  if (error) console.error("Erro ao deletar pagamento:", error);
 }
 
 // Rotas
